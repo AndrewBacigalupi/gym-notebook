@@ -8,6 +8,7 @@ import {
   logExercisePerformance,
   updateSessionNotes,
 } from "@/app/actions/workout-session";
+import { formatIsoDate } from "@/lib/format-date";
 import { prScoreFromMetrics, type PRMetrics } from "@/lib/pr";
 
 export type RunnerExercise = {
@@ -339,7 +340,7 @@ export function WorkoutRunner({
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Last time</p>
           {current.lastPerformance ? (
             <p className="mt-2 text-sm text-zinc-800">
-              {new Date(current.lastPerformance.performedAt).toLocaleDateString()}:{" "}
+              {formatIsoDate(current.lastPerformance.performedAt)}:{" "}
               {current.lastPerformance.weight} lb — {current.lastPerformance.reps.join(", ")}
             </p>
           ) : (

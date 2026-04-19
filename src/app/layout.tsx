@@ -26,8 +26,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      {/* suppressHydrationWarning: browser extensions (e.g. Grammarly) mutate <body> before React hydrates */}
+      <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
