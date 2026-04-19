@@ -38,7 +38,7 @@ Personal workout logging with Supabase Auth, PostgreSQL, and a Next.js (App Rout
 - `src/app` — routes: marketing home, `/login`, `/signup`, `/dashboard`, `/exercises/new`, `/workouts/new`, `/workouts/[id]/start`, `/progress`, `/progress/exercises/[id]`.
 - `src/app/actions` — server actions (auth, exercises, workouts, session logging, PRs).
 - `src/lib/pr.ts` — PR score and tie-break rules (`weight × avg reps`, then weight, then avg reps).
-- `src/lib/supabase` — browser and server Supabase clients; `middleware.ts` refreshes the auth cookie.
+- `src/lib/supabase` — browser and server Supabase clients; `src/proxy.ts` (Next.js 16) refreshes the auth cookie.
 - `supabase/migrations` — schema, RLS, and `profiles` trigger for new users.
 
 ## PR rule
