@@ -29,7 +29,7 @@ export default async function StartWorkoutPage({
     .select(
       `
       order_index,
-      exercises ( id, name )
+      exercises ( id, name, is_bodyweight )
     `
     )
     .eq("workout_id", workoutId)
@@ -38,11 +38,18 @@ export default async function StartWorkoutPage({
   const ordered =
     we
       ?.map((row) => {
-        const ex = row.exercises as unknown as { id: string; name: string } | null;
+        const ex = row.exercises as unknown as {
+          id: string;
+          name: string;
+          is_bodyweight: boolean | null;
+        } | null;
         if (!ex) return null;
-        return { id: ex.id, name: ex.name, order_index: row.order_index };
+        return { id: ex.id, name: ex.name, isBodyweight: ex.is_bodyweight === true, order_index: row.order_index };
       })
-      .filter((x): x is { id: string; name: string; order_index: number } => x !== null) ?? [];
+      .filter(
+        (x): x is { id: string; name: string; isBodyweight: boolean; order_index: number } =>
+          x !== null
+      ) ?? [];
 
   const exercises = await Promise.all(
     ordered.map(async (ex) => {
@@ -50,6 +57,7 @@ export default async function StartWorkoutPage({
       return {
         id: ex.id,
         name: ex.name,
+        isBodyweight: ex.isBodyweight,
         previousBest: insights.previousBest,
         lastPerformance: insights.lastPerformance,
       };

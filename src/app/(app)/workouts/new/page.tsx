@@ -11,7 +11,7 @@ export default async function NewWorkoutPage() {
 
   const { data: exercises } = await supabase
     .from("exercises")
-    .select("id, name")
+    .select("id, name, is_bodyweight")
     .eq("user_id", user.id)
     .order("name", { ascending: true });
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getExerciseFullHistory } from "@/lib/queries/exercise-insights";
 import { createClient } from "@/lib/supabase/server";
+import { formatPRDisplay } from "@/lib/pr";
 
 export default async function ExerciseProgressPage({
   params,
@@ -17,7 +18,7 @@ export default async function ExerciseProgressPage({
 
   const { data: exercise } = await supabase
     .from("exercises")
-    .select("id, name, notes")
+    .select("id, name, notes, is_bodyweight")
     .eq("id", exerciseId)
     .eq("user_id", user.id)
     .single();
@@ -32,7 +33,14 @@ export default async function ExerciseProgressPage({
         <Link href="/progress" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
           ← All exercises
         </Link>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">{exercise.name}</h1>
+        <div className="mt-4 flex flex-wrap items-baseline gap-2">
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">{exercise.name}</h1>
+          {exercise.is_bodyweight ? (
+            <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
+              Bodyweight
+            </span>
+          ) : null}
+        </div>
         {exercise.notes ? <p className="mt-2 text-sm text-zinc-600">{exercise.notes}</p> : null}
       </div>
 
@@ -48,14 +56,11 @@ export default async function ExerciseProgressPage({
                     <p className="text-sm font-medium text-zinc-900">
                       {new Date(row.performedAt).toLocaleString()}
                     </p>
-                    <p className="text-sm text-zinc-600">
-                      {row.weight} lb — {row.reps.join(", ")}
+                    <p className="text-sm text-zinc-600 tabular-nums">
+                      {formatPRDisplay(row.weight, row.reps, exercise.is_bodyweight === true)}
                     </p>
                   </div>
                   <div className="text-right text-sm">
-                    {row.prScore != null ? (
-                      <p className="text-zinc-700">Score {row.prScore.toFixed(1)}</p>
-                    ) : null}
                     {row.isPR ? (
                       <p className="font-medium text-amber-800">PR session</p>
                     ) : (

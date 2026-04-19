@@ -9,12 +9,13 @@ import {
   updateSessionNotes,
 } from "@/app/actions/workout-session";
 import { formatIsoDate } from "@/lib/format-date";
-import { prScoreFromMetrics, type PRMetrics } from "@/lib/pr";
+import { formatPRDisplay } from "@/lib/pr";
 
 export type RunnerExercise = {
   id: string;
   name: string;
-  previousBest: { weight: number; avgReps: number; score: number } | null;
+  isBodyweight: boolean;
+  previousBest: { weight: number; reps: number[] } | null;
   lastPerformance: { weight: number; reps: number[]; performedAt: string } | null;
 };
 
@@ -30,12 +31,14 @@ function ExerciseLogForm({
   onDone: (
     result: Awaited<ReturnType<typeof logExercisePerformance>>,
     last: boolean,
-    exerciseName: string
+    exercise: RunnerExercise
   ) => void;
 }) {
   const lp = exercise.lastPerformance;
   const defaultLen = Math.max(3, lp?.reps.length ?? 3);
-  const [weight, setWeight] = useState(() => (lp ? String(lp.weight) : ""));
+  const [weight, setWeight] = useState(() =>
+    exercise.isBodyweight ? "" : lp ? String(lp.weight) : ""
+  );
   const [reps, setReps] = useState(() =>
     Array.from({ length: defaultLen }, (_, i) =>
       lp?.reps[i] != null ? String(lp.reps[i]) : ""
@@ -57,11 +60,6 @@ function ExerciseLogForm({
   }
 
   async function submit(last: boolean) {
-    const w = parseFloat(weight);
-    if (!Number.isFinite(w) || w < 0) {
-      setSaveError("Enter a valid weight.");
-      return;
-    }
     const repsNums = reps
       .map((r) => parseInt(r, 10))
       .filter((n) => Number.isFinite(n) && n >= 0);
@@ -69,16 +67,25 @@ function ExerciseLogForm({
       setSaveError("Log reps for at least one set.");
       return;
     }
+    let load = 0;
+    if (!exercise.isBodyweight) {
+      const w = parseFloat(weight);
+      if (!Number.isFinite(w) || w <= 0) {
+        setSaveError("Enter a valid weight.");
+        return;
+      }
+      load = w;
+    }
     setSaveError(null);
     setPending(true);
     try {
       const result = await logExercisePerformance({
         sessionId,
         exerciseId: exercise.id,
-        weight: w,
+        weight: load,
         repsBySet: repsNums,
       });
-      onDone(result, last, exercise.name);
+      onDone(result, last, exercise);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -88,20 +95,24 @@ function ExerciseLogForm({
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <div className="max-w-xs">
-        <label htmlFor="weight" className="block text-sm font-medium text-zinc-700">
-          Weight (lb)
-        </label>
-        <input
-          id="weight"
-          inputMode="decimal"
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
-        />
-      </div>
+      {!exercise.isBodyweight ? (
+        <div className="max-w-xs">
+          <label htmlFor="weight" className="block text-sm font-medium text-zinc-700">
+            Weight (lb)
+          </label>
+          <input
+            id="weight"
+            inputMode="decimal"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
+          />
+        </div>
+      ) : (
+        <p className="text-sm text-zinc-600">Bodyweight — log reps for each set below.</p>
+      )}
 
-      <div className="mt-6">
+      <div className={exercise.isBodyweight ? "mt-2" : "mt-6"}>
         <p className="text-sm font-medium text-zinc-700">Sets</p>
         <div className="mt-3 space-y-2">
           {reps.map((r, i) => (
@@ -170,8 +181,9 @@ export function WorkoutRunner({
   const [step, setStep] = useState(0);
   const [prBanner, setPrBanner] = useState<{
     name: string;
-    prev: PRMetrics | null;
-    next: PRMetrics;
+    isBodyweight: boolean;
+    prev: { weight: number; reps: number[] } | null;
+    next: { weight: number; reps: number[] };
   } | null>(null);
   const [finished, setFinished] = useState(false);
   const [notes, setNotes] = useState("");
@@ -205,13 +217,14 @@ export function WorkoutRunner({
   function handleLogged(
     result: Awaited<ReturnType<typeof logExercisePerformance>>,
     last: boolean,
-    exerciseName: string
+    exercise: RunnerExercise
   ) {
     if (result.isPR) {
       setPrBanner({
-        name: exerciseName,
+        name: exercise.name,
+        isBodyweight: exercise.isBodyweight,
         prev: result.previousBest,
-        next: result.newMetrics,
+        next: { weight: result.newMetrics.weight, reps: result.newReps },
       });
     } else {
       setPrBanner(null);
@@ -319,7 +332,14 @@ export function WorkoutRunner({
           <p className="text-sm font-medium text-zinc-500">
             Exercise {step + 1} of {exercises.length}
           </p>
-          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">{current.name}</h2>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">{current.name}</h2>
+            {current.isBodyweight ? (
+              <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
+                Bodyweight
+              </span>
+            ) : null}
+          </div>
         </div>
         <p className="text-sm text-zinc-500">{workoutName}</p>
       </div>
@@ -328,9 +348,12 @@ export function WorkoutRunner({
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Previous best</p>
           {current.previousBest ? (
-            <p className="mt-2 text-sm text-zinc-800">
-              {current.previousBest.weight} lb · avg {current.previousBest.avgReps.toFixed(2)} reps · score{" "}
-              {current.previousBest.score.toFixed(1)}
+            <p className="mt-2 text-sm text-zinc-800 tabular-nums">
+              {formatPRDisplay(
+                current.previousBest.weight,
+                current.previousBest.reps,
+                current.isBodyweight
+              )}
             </p>
           ) : (
             <p className="mt-2 text-sm text-zinc-500">No history yet — this could be your first PR.</p>
@@ -339,9 +362,13 @@ export function WorkoutRunner({
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Last time</p>
           {current.lastPerformance ? (
-            <p className="mt-2 text-sm text-zinc-800">
+            <p className="mt-2 text-sm text-zinc-800 tabular-nums">
               {formatIsoDate(current.lastPerformance.performedAt)}:{" "}
-              {current.lastPerformance.weight} lb — {current.lastPerformance.reps.join(", ")}
+              {formatPRDisplay(
+                current.lastPerformance.weight,
+                current.lastPerformance.reps,
+                current.isBodyweight
+              )}
             </p>
           ) : (
             <p className="mt-2 text-sm text-zinc-500">No prior session for this movement.</p>
@@ -356,14 +383,13 @@ export function WorkoutRunner({
             {prBanner.name}:{" "}
             {prBanner.prev ? (
               <>
-                from {prBanner.prev.weight}×{prBanner.prev.avgReps.toFixed(2)} (
-                {prScoreFromMetrics(prBanner.prev).toFixed(1)}) → {prBanner.next.weight}×
-                {prBanner.next.avgReps.toFixed(2)} ({prScoreFromMetrics(prBanner.next).toFixed(1)})
+                from {formatPRDisplay(prBanner.prev.weight, prBanner.prev.reps, prBanner.isBodyweight)} →{" "}
+                {formatPRDisplay(prBanner.next.weight, prBanner.next.reps, prBanner.isBodyweight)}
               </>
             ) : (
               <>
-                first recorded entry at {prBanner.next.weight}×{prBanner.next.avgReps.toFixed(2)} (
-                {prScoreFromMetrics(prBanner.next).toFixed(1)})
+                first recorded entry at{" "}
+                {formatPRDisplay(prBanner.next.weight, prBanner.next.reps, prBanner.isBodyweight)}
               </>
             )}
           </p>

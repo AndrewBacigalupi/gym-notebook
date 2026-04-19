@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { averageReps, bestPR, prScoreFromMetrics, type PRMetrics } from "@/lib/pr";
+import { averageReps, bestPerformanceEntry, type PRMetrics } from "@/lib/pr";
 
 type LogRow = {
   weight: number;
@@ -56,8 +56,8 @@ export async function getExerciseInsightsForUser(
   ) as unknown as LogRow[];
 
   const parsed = parseLogs(rows);
-  const metricsOnly = parsed.map((p) => p.metrics);
-  const previousBest = bestPR(metricsOnly);
+  const entries = parsed.map((p) => ({ metrics: p.metrics, reps: p.reps }));
+  const previousBest = bestPerformanceEntry(entries);
 
   const last = [...parsed].sort(
     (a, b) =>
@@ -67,9 +67,8 @@ export async function getExerciseInsightsForUser(
   return {
     previousBest: previousBest
       ? {
-          weight: previousBest.weight,
-          avgReps: previousBest.avgReps,
-          score: prScoreFromMetrics(previousBest),
+          weight: previousBest.metrics.weight,
+          reps: previousBest.reps,
         }
       : null,
     lastPerformance: last
@@ -91,7 +90,6 @@ export async function getExerciseFullHistory(userId: string, exerciseId: string)
       id,
       session_id,
       weight,
-      pr_score,
       is_personal_record,
       workout_sessions!inner ( performed_at, user_id ),
       set_logs ( reps, set_number )
@@ -104,7 +102,6 @@ export async function getExerciseFullHistory(userId: string, exerciseId: string)
   type HistoryRow = LogRow & {
     id: string;
     session_id: string;
-    pr_score: number | null;
     is_personal_record: boolean;
   };
 
@@ -130,7 +127,6 @@ export async function getExerciseFullHistory(userId: string, exerciseId: string)
         performedAt: row.workout_sessions.performed_at,
         weight: Number(row.weight),
         reps,
-        prScore: row.pr_score != null ? Number(row.pr_score) : null,
         isPR: row.is_personal_record,
       };
     })
@@ -140,7 +136,6 @@ export async function getExerciseFullHistory(userId: string, exerciseId: string)
     performedAt: string;
     weight: number;
     reps: number[];
-    prScore: number | null;
     isPR: boolean;
   }[];
 }

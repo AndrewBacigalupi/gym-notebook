@@ -18,10 +18,13 @@ export async function createExercise(formData: FormData) {
 
   if (!name) throw new Error("Name is required");
 
+  const isBodyweight = formData.get("is_bodyweight") === "true";
+
   const { error } = await supabase.from("exercises").insert({
     user_id: user.id,
     name,
     notes,
+    is_bodyweight: isBodyweight,
   });
 
   if (error) throw new Error(error.message);

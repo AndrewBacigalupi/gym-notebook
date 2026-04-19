@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import {
   averageReps,
-  bestPR,
+  bestPerformanceEntry,
   isStrictlyBetterPR,
   prScoreFromMetrics,
+  type PerformanceEntry,
   type PRMetrics,
 } from "@/lib/pr";
 
@@ -34,12 +35,12 @@ type ExerciseLogRow = {
   set_logs: { reps: number; set_number: number }[] | null;
 };
 
-async function fetchHistoricalMetricsForExercise(
+async function fetchHistoricalPerformanceEntries(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   exerciseId: string,
   excludeSessionId?: string
-): Promise<PRMetrics[]> {
+): Promise<PerformanceEntry[]> {
   const { data, error } = await supabase
     .from("exercise_logs")
     .select(
@@ -54,7 +55,7 @@ async function fetchHistoricalMetricsForExercise(
 
   if (error) throw new Error(error.message);
 
-  const metrics: PRMetrics[] = [];
+  const entries: PerformanceEntry[] = [];
   for (const raw of data ?? []) {
     const row = raw as unknown as ExerciseLogRow;
     if (row.workout_sessions.user_id !== userId) continue;
@@ -64,9 +65,12 @@ async function fetchHistoricalMetricsForExercise(
     if (!sets?.length) continue;
     const ordered = [...sets].sort((a, b) => a.set_number - b.set_number);
     const reps = ordered.map((s) => s.reps);
-    metrics.push({ weight, avgReps: averageReps(reps) });
+    entries.push({
+      metrics: { weight, avgReps: averageReps(reps) },
+      reps,
+    });
   }
-  return metrics;
+  return entries;
 }
 
 export async function logExercisePerformance(input: {
@@ -81,7 +85,6 @@ export async function logExercisePerformance(input: {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const weight = input.weight;
   const reps = input.repsBySet.filter((r) => Number.isFinite(r));
   if (reps.length === 0) throw new Error("Enter reps for at least one set");
 
@@ -95,21 +98,37 @@ export async function logExercisePerformance(input: {
     throw new Error("Invalid session");
   }
 
-  const prior = await fetchHistoricalMetricsForExercise(
+  const { data: exerciseMeta, error: exErr } = await supabase
+    .from("exercises")
+    .select("is_bodyweight, user_id")
+    .eq("id", input.exerciseId)
+    .single();
+
+  if (exErr || !exerciseMeta || exerciseMeta.user_id !== user.id) {
+    throw new Error("Invalid exercise");
+  }
+
+  const isBodyweight = exerciseMeta.is_bodyweight === true;
+  const effectiveWeight = isBodyweight ? 0 : input.weight;
+  if (!isBodyweight && (!Number.isFinite(effectiveWeight) || effectiveWeight <= 0)) {
+    throw new Error("Enter a positive weight.");
+  }
+
+  const prior = await fetchHistoricalPerformanceEntries(
     supabase,
     user.id,
     input.exerciseId,
     input.sessionId
   );
   const candidate: PRMetrics = {
-    weight,
+    weight: effectiveWeight,
     avgReps: averageReps(reps),
   };
-  const previousBest = bestPR(prior);
+  const previousBestEntry = bestPerformanceEntry(prior);
   const isPR =
-    previousBest === undefined
+    previousBestEntry === undefined
       ? true
-      : isStrictlyBetterPR(candidate, previousBest);
+      : isStrictlyBetterPR(candidate, previousBestEntry.metrics);
 
   const prScore = prScoreFromMetrics(candidate);
 
@@ -118,7 +137,7 @@ export async function logExercisePerformance(input: {
     .insert({
       session_id: input.sessionId,
       exercise_id: input.exerciseId,
-      weight,
+      weight: effectiveWeight,
       pr_score: prScore,
       is_personal_record: isPR,
     })
@@ -142,8 +161,12 @@ export async function logExercisePerformance(input: {
   return {
     isPR,
     prScore,
-    previousBest: previousBest ?? null,
+    previousBest:
+      previousBestEntry != null
+        ? { weight: previousBestEntry.metrics.weight, reps: previousBestEntry.reps }
+        : null,
     newMetrics: candidate,
+    newReps: reps,
   };
 }
 

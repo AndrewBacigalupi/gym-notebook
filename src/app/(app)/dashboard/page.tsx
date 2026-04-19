@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { formatPRDisplay } from "@/lib/pr";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -33,18 +34,20 @@ export default async function DashboardPage() {
     .select(
       `
       id,
-      pr_score,
       weight,
-      exercises ( name ),
-      workout_sessions!inner ( performed_at, user_id )
+      exercises ( name, is_bodyweight ),
+      workout_sessions!inner ( performed_at, user_id ),
+      set_logs ( reps, set_number )
     `
     )
     .eq("is_personal_record", true);
 
   type PRRow = {
     id: string;
-    pr_score: number | null;
+    weight: number;
+    exercises?: { name: string; is_bodyweight: boolean | null } | null;
     workout_sessions: { performed_at: string; user_id: string };
+    set_logs: { reps: number; set_number: number }[] | null;
   };
 
   const recentPRs = (prRowsRaw ?? [])
@@ -149,14 +152,20 @@ export default async function DashboardPage() {
           {recentPRs.length > 0 ? (
             <ul className="mt-4 space-y-3">
               {recentPRs.map((row) => {
-                const ex = (row as unknown as { exercises?: { name: string } | null })
-                  .exercises;
+                const r = row as PRRow;
+                const ex = r.exercises;
+                const repsOrdered = r.set_logs
+                  ? [...r.set_logs]
+                      .sort((a, b) => a.set_number - b.set_number)
+                      .map((s) => s.reps)
+                  : [];
+                const bw = ex?.is_bodyweight === true;
                 return (
-                  <li key={row.id} className="text-sm">
+                  <li key={r.id} className="text-sm">
                     <p className="font-medium text-zinc-900">{ex?.name ?? "Exercise"}</p>
-                    <p className="text-zinc-600">
-                      Score {row.pr_score != null ? row.pr_score.toFixed(1) : "—"} ·{" "}
-                      {new Date(row.workout_sessions.performed_at).toLocaleDateString()}
+                    <p className="text-zinc-600 tabular-nums">
+                      {formatPRDisplay(Number(r.weight), repsOrdered, bw)} ·{" "}
+                      {new Date(r.workout_sessions.performed_at).toLocaleDateString()}
                     </p>
                   </li>
                 );

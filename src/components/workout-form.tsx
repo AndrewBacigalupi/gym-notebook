@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import { createWorkout } from "@/app/actions/workouts";
 
-export type ExerciseOption = { id: string; name: string };
+export type ExerciseOption = { id: string; name: string; is_bodyweight?: boolean | null };
+
+function exerciseLabel(ex: ExerciseOption | undefined): string {
+  if (!ex) return "Exercise";
+  return ex.is_bodyweight ? `${ex.name} (BW)` : ex.name;
+}
 
 export function WorkoutForm({ exercises }: { exercises: ExerciseOption[] }) {
   const [name, setName] = useState("");
@@ -75,7 +80,7 @@ export function WorkoutForm({ exercises }: { exercises: ExerciseOption[] }) {
                 onClick={() => addExercise(ex.id)}
                 className="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-sm text-zinc-800 hover:bg-white"
               >
-                + {ex.name}
+                + {exerciseLabel(ex)}
               </button>
             ))
           )}
@@ -89,14 +94,14 @@ export function WorkoutForm({ exercises }: { exercises: ExerciseOption[] }) {
         ) : (
           <ol className="mt-3 space-y-2">
             {orderedIds.map((id, index) => {
-              const label = exercises.find((e) => e.id === id)?.name ?? "Exercise";
+              const ex = exercises.find((e) => e.id === id);
               return (
                 <li
                   key={`${id}-${index}`}
                   className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
                 >
                   <span className="text-sm font-medium text-zinc-900">
-                    {index + 1}. {label}
+                    {index + 1}. {exerciseLabel(ex)}
                   </span>
                   <span className="flex gap-1">
                     <button
