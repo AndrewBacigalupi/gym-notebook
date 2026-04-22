@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createWorkout } from "@/app/actions/workouts";
+import { createWorkout, updateWorkout } from "@/app/actions/workouts";
 
 export type ExerciseOption = { id: string; name: string; is_bodyweight?: boolean | null };
 
@@ -10,9 +10,15 @@ function exerciseLabel(ex: ExerciseOption | undefined): string {
   return ex.is_bodyweight ? `${ex.name} (BW)` : ex.name;
 }
 
-export function WorkoutForm({ exercises }: { exercises: ExerciseOption[] }) {
-  const [name, setName] = useState("");
-  const [orderedIds, setOrderedIds] = useState<string[]>([]);
+export function WorkoutForm({
+  exercises,
+  initialData,
+}: {
+  exercises: ExerciseOption[];
+  initialData?: { id: string; name: string; exerciseIds: string[] };
+}) {
+  const [name, setName] = useState(initialData?.name ?? "");
+  const [orderedIds, setOrderedIds] = useState<string[]>(initialData?.exerciseIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -42,7 +48,11 @@ export function WorkoutForm({ exercises }: { exercises: ExerciseOption[] }) {
     setError(null);
     startTransition(async () => {
       try {
-        await createWorkout({ name, exerciseIdsInOrder: orderedIds });
+        if (initialData) {
+          await updateWorkout({ id: initialData.id, name, exerciseIdsInOrder: orderedIds });
+        } else {
+          await createWorkout({ name, exerciseIdsInOrder: orderedIds });
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not save");
       }
